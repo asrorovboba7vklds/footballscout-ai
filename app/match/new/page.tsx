@@ -188,21 +188,61 @@ export default function NewMatchPage() {
 
   /**
    * Normalise any date-like value into ISO YYYY-MM-DD.
-   * Handles native date-input values, localised strings that Safari /
-   * mobile browsers may produce, and Date objects.
+   * Handles: YYYY-MM-DD, DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY,
+   * Russian locale strings like "25 июня 2026 г.", and
+   * native Date.toLocaleDateString output.
    */
   const normaliseDateToISO = (raw: string): string => {
-    // Already in YYYY-MM-DD format — fast path
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (!raw || !raw.trim()) return new Date().toISOString().split('T')[0];
+    const s = raw.trim();
 
-    // Try to parse whatever the browser gave us
-    const parsed = new Date(raw);
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+    // DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
+    const dotMatch = s.match(/^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4})$/);
+    if (dotMatch) {
+      const [, dd, mm, yyyy] = dotMatch;
+      return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    }
+
+    // Russian locale: "25 июня 2026 г." / "25 июн. 2026" etc.
+    const ruMonths: Record<string, string> = {
+      'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
+      'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
+      'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
+      'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+      'июня': '06', 'июля': '07', 'августа': '08', 'сентября': '09',
+      'октября': '10', 'ноября': '11', 'декабря': '12',
+    };
+    const ruMatch = s.match(/(\d{1,2})\s+([а-яё]+)\.?\s+(\d{4})/);
+    if (ruMatch) {
+      const [, dd, monthStr, yyyy] = ruMatch;
+      const monthKey = monthStr.toLowerCase().replace(/\.$/, '');
+      const mm = ruMonths[monthKey];
+      if (mm) return `${yyyy}-${mm}-${dd.padStart(2, '0')}`;
+    }
+
+    // Fallback: try native Date parsing
+    const parsed = new Date(s);
     if (!isNaN(parsed.getTime())) {
       return parsed.toISOString().split('T')[0];
     }
 
-    // Last resort: return today
+    // Last resort: today
     return new Date().toISOString().split('T')[0];
+  };
+
+  /** Handle date input change — normalise immediately if needed */
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // For proper date inputs, value is always YYYY-MM-DD
+    // For fallback text inputs, normalise immediately
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val) || val === '') {
+      setMatchDate(val);
+    } else {
+      setMatchDate(normaliseDateToISO(val));
+    }
   };
 
   const handleSaveMatch = async (withAnalysis: boolean) => {
@@ -576,7 +616,7 @@ export default function NewMatchPage() {
                     <input
                       type="date"
                       value={matchDate}
-                      onChange={(e) => setMatchDate(e.target.value)}
+                      onChange={handleDateChange}
                       className={`${inputCls} [color-scheme:dark]`}
                     />
                   </div>
