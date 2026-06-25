@@ -186,6 +186,25 @@ export default function NewMatchPage() {
     setVideoFile(file);
   }, []);
 
+  /**
+   * Normalise any date-like value into ISO YYYY-MM-DD.
+   * Handles native date-input values, localised strings that Safari /
+   * mobile browsers may produce, and Date objects.
+   */
+  const normaliseDateToISO = (raw: string): string => {
+    // Already in YYYY-MM-DD format — fast path
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    // Try to parse whatever the browser gave us
+    const parsed = new Date(raw);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+
+    // Last resort: return today
+    return new Date().toISOString().split('T')[0];
+  };
+
   const handleSaveMatch = async (withAnalysis: boolean) => {
     if (!player) {
       setError('Сначала создайте профиль игрока');
@@ -200,13 +219,16 @@ export default function NewMatchPage() {
     setError('');
     setAnalyzeStep('saving_match');
 
+    // Guarantee YYYY-MM-DD regardless of browser locale
+    const isoDate = normaliseDateToISO(matchDate);
+
     try {
       // 1) Создаём запись матча
       const { data: match, error: matchErr } = await supabase
         .from('matches')
         .insert({
           player_id: player.id,
-          match_date: matchDate,
+          match_date: isoDate,
           opponent: opponent.trim() || null,
           match_type: matchType,
           notes: notes.trim() || null,
